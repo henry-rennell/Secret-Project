@@ -40,3 +40,48 @@ router.post('/gigs', upload.single('image'), async (req, res) => {
     })
 
 })
+
+//get gigs based on user interests,
+
+/* 
+
+This route is designed to facilitate a section of the app dedicated to finding upcoming events based genres and interests determined by the user on creation of their account
+
+*/
+router.get('/gigs/interests/:username', async (req, res) => {
+    const username = req.params.username;
+
+    //returning the interests of the user in order to make another query for gigs based on those interests
+    const sql = `select interests from users where username = $1;`
+    
+    pool.query(sql, [username], (err, dbRes) => {
+        if(err) console.log(err, 'first query')
+
+        let interests = (dbRes.rows[0].interests);
+
+        //sql statement to return gigs where at least 1 of the keywords matches 1 of the users interests
+        let sql = `SELECT *
+        FROM gigs
+        WHERE EXISTS (
+            SELECT 1
+            FROM unnest(keywords) AS gig_keyword
+            WHERE gig_keyword = ANY(array[$1, $2, $3, $4, $5])
+        );
+        `
+        
+        //incase the user has less than the maximum 5 interests
+        if (interests.length < 5) {
+            for(let i = 0; i < 5 - interests.length; i++) {
+                interests.push('');
+            }
+        }
+        
+        //second query, each value in the users interests array is being sanitised to make sure there is no injection possible, (it looks clunky but is very functional) returns all of the gigs with overlap in the users interests
+        pool.query(sql, [interests[0], interests[1], interests[2], interests[3], interests[4]], (err, result) => {
+            if(err) console.log(err)
+            //returning the result
+            res.send(result.rows)
+        })
+    })
+
+})
